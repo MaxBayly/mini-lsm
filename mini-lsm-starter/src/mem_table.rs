@@ -152,7 +152,7 @@ impl MemTable {
 }
 
 type SkipMapRangeIter<'a> =
-    crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
+crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
 
 /// An iterator over a range of `SkipMap`. This is a self-referential structure and please refer to week 1, day 2
 /// chapter for more information.
@@ -174,7 +174,7 @@ impl StorageIterator for MemTableIterator {
     type KeyType<'a> = KeySlice<'a>;
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        self.with_iter({ |it| it. })
     }
 
     fn key(&self) -> KeySlice {
@@ -186,6 +186,19 @@ impl StorageIterator for MemTableIterator {
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        let record = self.with_iter_mut({
+            |it| {
+                it.next()
+            }
+        });
+
+        match record {
+            Some(entry) => {
+                self.with_item_mut(|mut kv| kv = &mut(*entry.key(), *entry.value()) )
+            },
+            None => { () }
+        }
+
+        Ok(())
     }
 }
