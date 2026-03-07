@@ -330,7 +330,7 @@ impl LsmStorageInner {
 
     /// Remove a key from the storage by writing an empty value.
     pub fn delete(&self, _key: &[u8]) -> Result<()> {
-        self.state.read().memtable.put(_key, b"")
+        self.put(_key, b"")
     }
 
     pub(crate) fn path_of_sst_static(path: impl AsRef<Path>, id: usize) -> PathBuf {
