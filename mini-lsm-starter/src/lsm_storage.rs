@@ -298,6 +298,7 @@ impl LsmStorageInner {
 
     /// Get a key from the storage. In day 7, this can be further optimized by using a bloom filter.
     pub fn get(&self, _key: &[u8]) -> Result<Option<Bytes>> {
+        // check current memtable
         let val = self.state.read().memtable.get(_key);
         match val {
             Some(inner) => {
@@ -307,7 +308,26 @@ impl LsmStorageInner {
                     Ok(Some(inner))
                 }
             }
-            None => Ok(None)
+            // if not found, check frozen memtables in order
+            None => {
+                for table in self.state.read().imm_memtables.iter() {
+                    let v = table.get(_key);
+                    match v {
+                        // key found, return value
+                        Some(inner) => {
+                            if inner.eq(&Bytes::copy_from_slice(b"")) {
+                                return Ok(None);
+                            } else {
+                                return Ok(Some(inner));
+                            }
+                        }
+                        // move onto the next memtable
+                        None => continue,
+                    }
+                }
+                // key not found in any table
+                Ok(None)
+            }
         }
     }
 
@@ -318,7 +338,11 @@ impl LsmStorageInner {
 
     /// Put a key-value pair into the storage by writing into the current memtable.
     pub fn put(&self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        self.state.read().memtable.put(_key, _value).expect("TODO: panic message");
+        self.state
+            .read()
+            .memtable
+            .put(_key, _value)
+            .expect("TODO: panic message");
         if self.state.read().memtable.approximate_size() > self.options.target_sst_size {
             let state_lock = self.state_lock.lock();
             if self.state.read().memtable.approximate_size() > self.options.target_sst_size {
@@ -355,20 +379,20 @@ impl LsmStorageInner {
 
     /// Force freeze the current memtable to an immutable memtable
     pub fn force_freeze_memtable(&self, _state_lock_observer: &MutexGuard<'_, ()>) -> Result<()> {
-
         // clone state
         let mut new_state = LsmStorageState::clone(&self.state.read());
         // acquire lock
         let mut state = self.state.write();
         // push memtable to immutable vector
-        new_state.imm_memtables.insert(0usize, state.memtable.clone());
+        new_state
+            .imm_memtables
+            .insert(0usize, state.memtable.clone());
         // create new memtable, set next id
         new_state.memtable = Arc::new(MemTable::create(self.next_sst_id()));
         // deref state through the lock and set it to the new state
         *state = Arc::new(new_state);
 
         Ok(())
-
     }
 
     /// Force flush the earliest-created immutable memtable to disk

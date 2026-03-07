@@ -20,16 +20,16 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use anyhow::Result;
-use bytes::{Buf, Bytes};
-use crossbeam_skiplist::map::Entry;
-use crossbeam_skiplist::SkipMap;
-use nom::AsBytes;
-use ouroboros::self_referencing;
 use crate::iterators::StorageIterator;
 use crate::key::KeySlice;
 use crate::table::SsTableBuilder;
 use crate::wal::Wal;
+use anyhow::Result;
+use bytes::{Buf, Bytes};
+use crossbeam_skiplist::SkipMap;
+use crossbeam_skiplist::map::Entry;
+use nom::AsBytes;
+use ouroboros::self_referencing;
 
 /// A basic mem-table based on crossbeam-skiplist.
 ///
@@ -58,7 +58,7 @@ impl MemTable {
             map: SkipMap::new().into(),
             wal: None,
             id: _id,
-            approximate_size: Arc::from(AtomicUsize::new(0))
+            approximate_size: Arc::from(AtomicUsize::new(0)),
         }
     }
 
@@ -93,9 +93,7 @@ impl MemTable {
 
     /// Get a value by key.
     pub fn get(&self, _key: &[u8]) -> Option<Bytes> {
-
         self.map.get(_key).map(|ent| ent.value().to_owned())
-
     }
 
     /// Put a key-value pair into the mem-table.
@@ -110,9 +108,9 @@ impl MemTable {
         let combined_size = key_bytes.len() + value_bytes.len();
         let old_size = self.approximate_size.load(Ordering::Relaxed);
         Arc::clone(&self.approximate_size).store(combined_size + old_size, Ordering::Relaxed);
-        
+
         self.map.insert(key_bytes, value_bytes);
-        
+
         Ok(())
     }
 
