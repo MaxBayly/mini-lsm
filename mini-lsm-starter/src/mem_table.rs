@@ -128,7 +128,15 @@ impl MemTable {
 
     /// Get an iterator over a range of keys.
     pub fn scan(&self, _lower: Bound<&[u8]>, _upper: Bound<&[u8]>) -> MemTableIterator {
-        unimplemented!()
+        let lower_bound = map_bound(_lower);
+        let upper_bound = map_bound(_upper);
+        let mut iter = MemTableIterator::new(
+            Arc::clone(&self.map),
+            |map| map.range((lower_bound, upper_bound)),
+            (Bytes::new(), Bytes::new()),
+        );
+        iter.next();
+        iter
     }
 
     /// Flush the mem-table to SSTable. Implement in week 1 day 6.
@@ -152,7 +160,7 @@ impl MemTable {
 }
 
 type SkipMapRangeIter<'a> =
-crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
+    crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
 
 /// An iterator over a range of `SkipMap`. This is a self-referential structure and please refer to week 1, day 2
 /// chapter for more information.
@@ -174,11 +182,11 @@ impl StorageIterator for MemTableIterator {
     type KeyType<'a> = KeySlice<'a>;
 
     fn value(&self) -> &[u8] {
-        self.with_item(|it| &it.1 )
+        self.with_item(|it| &it.1)
     }
 
     fn key(&self) -> KeySlice {
-        self.with_item(|it| KeySlice::from_slice(&it.0) )
+        self.with_item(|it| KeySlice::from_slice(&it.0))
     }
 
     fn is_valid(&self) -> bool {
@@ -188,15 +196,16 @@ impl StorageIterator for MemTableIterator {
     fn next(&mut self) -> Result<()> {
         let record = self.with_iter_mut({
             |it| {
-                it.next().map(|entry| (entry.key().clone(), entry.value().clone()))
+                it.next()
+                    .map(|entry| (entry.key().clone(), entry.value().clone()))
             }
         });
 
         match record {
-            Some((key, value)) => {
-                self.with_item_mut(|kv| *kv = (key, value) )
-            },
-            None => { self.with_item_mut(|kv| *kv = (Bytes::copy_from_slice(b""), Bytes::copy_from_slice(b""))) }
+            Some((key, value)) => self.with_item_mut(|kv| *kv = (key, value)),
+            None => self.with_item_mut(|kv| {
+                *kv = (Bytes::copy_from_slice(b""), Bytes::copy_from_slice(b""))
+            }),
         }
 
         Ok(())

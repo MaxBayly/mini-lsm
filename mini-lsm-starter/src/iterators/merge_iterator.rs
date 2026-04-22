@@ -59,7 +59,27 @@ pub struct MergeIterator<I: StorageIterator> {
 
 impl<I: StorageIterator> MergeIterator<I> {
     pub fn create(iters: Vec<Box<I>>) -> Self {
-        unimplemented!()
+        let mut idx = 0usize;
+        let wrappers: Vec<HeapWrapper<I>> = iters
+            .into_iter()
+            .map(|inner_box| -> HeapWrapper<I> {
+                let wrapper = HeapWrapper {
+                    0: idx,
+                    1: inner_box,
+                };
+                idx += 1;
+                wrapper
+            })
+            .filter(|it| it.1.is_valid())
+            .collect();
+        let mut inner_iters = BinaryHeap::from(wrappers);
+        let smallest = inner_iters.pop();
+
+        let iterator = MergeIterator {
+            iters: inner_iters,
+            current: smallest,
+        };
+        iterator
     }
 }
 
@@ -69,18 +89,92 @@ impl<I: 'static + for<'a> StorageIterator<KeyType<'a> = KeySlice<'a>>> StorageIt
     type KeyType<'a> = KeySlice<'a>;
 
     fn key(&self) -> KeySlice {
-        unimplemented!()
+        self.current.as_ref().unwrap().1.key()
     }
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        self.current.as_ref().unwrap().1.value()
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        self.current.is_some() && self.current.as_ref().unwrap().1.is_valid()
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        match self.current.as_ref() {
+            None => Ok(()),
+            Some(wrapper) => {
+                let old_key = wrapper.1.key();
+                let iters = &mut self.iters;
+
+                while let Some(mut head_iter) = iters.pop() {
+                    // if the key of the next smallest iterator is not equal to the current key, then we
+                    // move moved past this element
+                    if head_iter.1.key() != old_key {
+                        iters.push(head_iter);
+                        break;
+                    }
+
+                    // if it is equal, advance that iterator
+                    head_iter.1.next()?;
+                    if head_iter.1.is_valid() {
+                        iters.push(head_iter);
+                    }
+                }
+
+                // take current from memory
+                let mut curr = self.current.take();
+                // advance current iterator
+                curr.as_mut().unwrap().1.next()?;
+                // place back in the heap if still valid
+                match curr {
+                    None => {}
+                    Some(iterator) => {
+                        if iterator.1.is_valid() {
+                            iters.push(iterator)
+                        }
+                    }
+                }
+
+                // find the next smallest iterator
+                match iters.pop() {
+                    // if none, then iterator is finished
+                    None => {
+                        self.current = None;
+                        return Ok(());
+                    }
+                    // if some, that is the new current (and is no longer in the heap after the pop())
+                    Some(iter) => {
+                        if iter.1.is_valid() {
+                            self.current = Some(iter)
+                        };
+                    }
+                };
+
+                // store a ref to the key of the new current iterator
+                let key = self.current.as_ref().unwrap().1.key();
+                // infinitely peek_mut
+                while let Some(mut head_iter) = iters.pop() {
+                    // if the key of the next smallest iterator is not equal to the current key, then we
+                    // move moved past this element
+                    let idx = head_iter.0;
+                    // println!("{:?}", idx);
+                    if head_iter.1.key() != key {
+                        if head_iter.1.is_valid() {
+                            iters.push(head_iter)
+                        }
+                        break;
+                    }
+
+                    // if it is equal, advance that iterator
+                    head_iter.1.next();
+                    if head_iter.1.is_valid() {
+                        iters.push(head_iter)
+                    }
+                }
+
+                Ok(())
+            }
+        }
     }
 }
