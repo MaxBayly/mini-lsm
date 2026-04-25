@@ -19,7 +19,7 @@ mod builder;
 mod iterator;
 
 pub use builder::BlockBuilder;
-use bytes::Bytes;
+use bytes::{BufMut, Bytes};
 pub use iterator::BlockIterator;
 
 /// A block is the smallest unit of read and caching in LSM tree. It is a collection of sorted key-value pairs.
@@ -32,11 +32,30 @@ impl Block {
     /// Encode the internal data to the data layout illustrated in the course
     /// Note: You may want to recheck if any of the expected field is missing from your output
     pub fn encode(&self) -> Bytes {
-        unimplemented!()
+        let mut buf = self.data.clone();
+        for &offset in &self.offsets {
+            buf.put_u16(offset);
+        }
+        buf.put_u16(self.offsets.len() as u16);
+        Bytes::copy_from_slice(&buf)
     }
 
     /// Decode from the data layout, transform the input `data` to a single `Block`
     pub fn decode(data: &[u8]) -> Self {
-        unimplemented!()
+        let entry_count_bytes: &[u8] = &data[data.len() - 2..];
+        let entry_count = u16::from_be_bytes([data[data.len() - 2], data[data.len() - 1]]);
+        let offset_bytes = &data[data.len() - (entry_count * 2) as usize - 2..data.len() - 2];
+        let mut offsets = vec![];
+        for chunk in offset_bytes.chunks_exact(2) {
+            let offset = u16::from_be_bytes([chunk[0], chunk[1]]);
+            offsets.push(offset);
+        }
+
+        let data_bytes = &data[0..(data.len() - (entry_count * 2) as usize - 2)];
+
+        Block {
+            data: data_bytes.into(),
+            offsets,
+        }
     }
 }

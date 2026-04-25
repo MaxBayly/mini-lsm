@@ -25,10 +25,8 @@ use crate::key::KeySlice;
 use crate::table::SsTableBuilder;
 use crate::wal::Wal;
 use anyhow::Result;
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use crossbeam_skiplist::SkipMap;
-use crossbeam_skiplist::map::Entry;
-use nom::AsBytes;
 use ouroboros::self_referencing;
 
 /// A basic mem-table based on crossbeam-skiplist.

@@ -63,10 +63,7 @@ impl<I: StorageIterator> MergeIterator<I> {
         let wrappers: Vec<HeapWrapper<I>> = iters
             .into_iter()
             .map(|inner_box| -> HeapWrapper<I> {
-                let wrapper = HeapWrapper {
-                    0: idx,
-                    1: inner_box,
-                };
+                let wrapper = HeapWrapper(idx, inner_box);
                 idx += 1;
                 wrapper
             })
@@ -75,11 +72,10 @@ impl<I: StorageIterator> MergeIterator<I> {
         let mut inner_iters = BinaryHeap::from(wrappers);
         let smallest = inner_iters.pop();
 
-        let iterator = MergeIterator {
+        MergeIterator {
             iters: inner_iters,
             current: smallest,
-        };
-        iterator
+        }
     }
 }
 
