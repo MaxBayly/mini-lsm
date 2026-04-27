@@ -137,7 +137,6 @@ impl BlockIterator {
                 ]) as usize;
                 let val_range = (val_start + 2, val_start + 2 + val_size);
                 self.value_range = val_range;
-                // self.key = KeyVec::from_vec(key.into_inner().to_owned());
             }
             return;
         }
