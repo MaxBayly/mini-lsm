@@ -54,17 +54,17 @@ impl BlockBuilder {
             return false;
         }
 
-        let key_length = key.into_inner();
-        let val_length = value.len();
-        let mut buf = vec![];
-        buf.put_u16(key.len() as u16);
-        buf.put(key.into_inner());
-        buf.put_u16(val_length as u16);
-        buf.put(value);
         let offset = u16::try_from(self.data.len()).expect("offset too large");
+
+        self.data.reserve(2 + key.len() + 2 + value.len());
+        let val_length = value.len();
+        self.data.put_u16(key.len() as u16);
+        self.data.put(key.into_inner());
+        self.data.put_u16(val_length as u16);
+        self.data.put(value);
+
         self.offsets.push(offset);
 
-        self.data.append(&mut buf);
         true
     }
 
@@ -75,13 +75,6 @@ impl BlockBuilder {
 
     /// Finalize the block.
     pub fn build(self) -> Block {
-        // let mut offsets: Vec<u16> = vec![];
-        // let mut offset: u16 = 0;
-        // for entry in &self.data {
-        //     offsets.push(offset);
-        //     offset += entry.to_usize() as u16;
-        // }
-
         Block {
             data: self.data,
             offsets: self.offsets,
