@@ -301,10 +301,11 @@ impl LsmStorageInner {
     /// Get a key from the storage. In day 7, this can be further optimized by using a bloom filter.
     pub fn get(&self, _key: &[u8]) -> Result<Option<Bytes>> {
         // check current memtable
-        let val = self.state.read().memtable.get(_key);
+        let state = self.state.read().clone();
+        let val = state.memtable.get(_key);
         match val {
             Some(inner) => {
-                if inner.eq(&Bytes::copy_from_slice(b"")) {
+                if inner.is_empty() {
                     Ok(None)
                 } else {
                     Ok(Some(inner))
@@ -312,12 +313,12 @@ impl LsmStorageInner {
             }
             // if not found, check frozen memtables in order
             None => {
-                for table in self.state.read().imm_memtables.iter() {
+                for table in state.imm_memtables.iter() {
                     let v = table.get(_key);
                     match v {
                         // key found, return value
                         Some(inner) => {
-                            if inner.eq(&Bytes::copy_from_slice(b"")) {
+                            if inner.is_empty() {
                                 return Ok(None);
                             } else {
                                 return Ok(Some(inner));
@@ -340,15 +341,11 @@ impl LsmStorageInner {
 
     /// Put a key-value pair into the storage by writing into the current memtable.
     pub fn put(&self, _key: &[u8], _value: &[u8]) -> Result<()> {
-        self.state
-            .read()
-            .memtable
-            .put(_key, _value)
-            .expect("TODO: panic message");
+        self.state.read().memtable.put(_key, _value)?;
         if self.state.read().memtable.approximate_size() > self.options.target_sst_size {
             let state_lock = self.state_lock.lock();
             if self.state.read().memtable.approximate_size() > self.options.target_sst_size {
-                self.force_freeze_memtable(&state_lock);
+                self.force_freeze_memtable(&state_lock)?;
             }
         }
         Ok(())
@@ -413,8 +410,9 @@ impl LsmStorageInner {
         _lower: Bound<&[u8]>,
         _upper: Bound<&[u8]>,
     ) -> Result<FusedIterator<LsmIterator>> {
-        let mut current_table = vec![self.state.read().memtable.clone()];
-        let mut imm_tables = self.state.read().imm_memtables.clone();
+        let state = self.state.read().clone();
+        let mut current_table = vec![state.memtable.clone()];
+        let mut imm_tables = state.imm_memtables.clone();
         current_table.append(&mut imm_tables);
         let boxed_memtable_iterators: Vec<Box<MemTableIterator>> = current_table
             .into_iter()

@@ -56,7 +56,7 @@ impl MemTable {
             map: SkipMap::new().into(),
             wal: None,
             id: _id,
-            approximate_size: Arc::from(AtomicUsize::new(0)),
+            approximate_size: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -91,7 +91,7 @@ impl MemTable {
 
     /// Get a value by key.
     pub fn get(&self, _key: &[u8]) -> Option<Bytes> {
-        self.map.get(_key).map(|ent| ent.value().to_owned())
+        self.map.get(_key).map(|ent| ent.value().clone())
     }
 
     /// Put a key-value pair into the mem-table.
@@ -104,8 +104,8 @@ impl MemTable {
         let key_bytes = Bytes::copy_from_slice(_key);
         let value_bytes = Bytes::copy_from_slice(_value);
         let combined_size = key_bytes.len() + value_bytes.len();
-        let old_size = self.approximate_size.load(Ordering::Relaxed);
-        Arc::clone(&self.approximate_size).store(combined_size + old_size, Ordering::Relaxed);
+        self.approximate_size
+            .fetch_add(combined_size, Ordering::Relaxed);
 
         self.map.insert(key_bytes, value_bytes);
 
@@ -188,7 +188,7 @@ impl StorageIterator for MemTableIterator {
     }
 
     fn is_valid(&self) -> bool {
-        self.with_item(|item| item.0 != Bytes::copy_from_slice(b""))
+        self.with_item(|item| !item.0.is_empty())
     }
 
     fn next(&mut self) -> Result<()> {

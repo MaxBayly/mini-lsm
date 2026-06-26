@@ -47,6 +47,13 @@ impl BlockBuilder {
     /// You may find the `bytes::BufMut` trait useful for manipulating binary data.
     #[must_use]
     pub fn add(&mut self, key: KeySlice, value: &[u8]) -> bool {
+        let length = self.data.len() + (self.offsets.len() * 2);
+        // old length + 2 (key len bytes) + key.len (key bytes) + 2 (value len bytes) + value.len (value bytes) + 2 (one more offset u16) +  2 (entry count)
+        let new_length = length + 2 + key.len() + 2 + value.len() + 2 + 2;
+        if new_length > self.block_size && !self.offsets.is_empty() {
+            return false;
+        }
+
         let key_length = key.into_inner();
         let val_length = value.len();
         let mut buf = vec![];
@@ -54,19 +61,11 @@ impl BlockBuilder {
         buf.put(key.into_inner());
         buf.put_u16(val_length as u16);
         buf.put(value);
-        match self.offsets.last() {
-            Some(prev) => {
-                let new_offset = prev + buf.len() as u16;
-                self.offsets.push(new_offset);
-            }
-            None => {
-                self.offsets.push(0);
-            }
-        }
+        let offset = u16::try_from(self.data.len()).expect("offset too large");
+        self.offsets.push(offset);
 
         self.data.append(&mut buf);
-        let length = self.data.len() + (self.offsets.len() * 2);
-        length < self.block_size || self.offsets.len() == 1
+        true
     }
 
     /// Check if there is no key-value pair in the block.
