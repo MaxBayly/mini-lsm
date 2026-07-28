@@ -15,7 +15,7 @@
 #![allow(unused_variables)] // TODO(you): remove this lint after implementing this mod
 #![allow(dead_code)] // TODO(you): remove this lint after implementing this mod
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use super::StorageIterator;
 
@@ -24,7 +24,7 @@ use super::StorageIterator;
 pub struct TwoMergeIterator<A: StorageIterator, B: StorageIterator> {
     a: A,
     b: B,
-    // Add fields as need
+    choose_a: bool,
 }
 
 impl<
@@ -33,7 +33,24 @@ impl<
 > TwoMergeIterator<A, B>
 {
     pub fn create(a: A, b: B) -> Result<Self> {
-        unimplemented!()
+        let mut iter = Self {
+            a,
+            b,
+            choose_a: false,
+        };
+        if iter.a.is_valid() && iter.b.is_valid() && &iter.b.key() == &iter.a.key() {
+            iter.b.next()?;
+        }
+
+        iter.choose_a = if !iter.a.is_valid() {
+            false
+        } else if !iter.b.is_valid() {
+            true
+        } else {
+            iter.a.key() < iter.b.key()
+        };
+
+        Ok(iter)
     }
 }
 
@@ -45,18 +62,46 @@ impl<
     type KeyType<'a> = A::KeyType<'a>;
 
     fn key(&self) -> Self::KeyType<'_> {
-        unimplemented!()
+        if self.choose_a {
+            self.a.key()
+        } else {
+            self.b.key()
+        }
     }
 
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        if self.choose_a {
+            self.a.value()
+        } else {
+            self.b.value()
+        }
     }
 
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        self.a.is_valid() || self.b.is_valid()
     }
 
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+
+        if self.choose_a {
+            self.a.next()?;
+        } else {
+            self.b.next()?;
+        }
+
+        if self.a.is_valid() && self.b.is_valid() && self.b.key() == self.a.key() {
+            self.b.next()?;
+        }
+
+        self.choose_a = if !self.a.is_valid() {
+             false
+        } else if !self.b.is_valid() {
+             true
+        } else {
+            self.a.key() < self.b.key()
+        };
+
+        Ok(())
+
     }
 }
